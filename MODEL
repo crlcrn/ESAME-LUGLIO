@@ -1,0 +1,112 @@
+import networkx as nx
+
+from database.DAO import DAO
+
+
+class Model:
+    def __init__(self):
+        self._graph = nx.DiGraph()
+
+    def get_chromosomes(self):
+        return DAO.get_all_chromosomes()
+
+    def build_graph(self, ch_min, ch_max):
+        self._graph.clear()
+        nodes = DAO.get_nodes(ch_min, ch_max)
+        self._graph.add_nodes_from(nodes)
+
+        edges = DAO.get_edges(ch_min, ch_max)
+        if edges:
+            added_edges = set()  # Traccia gli archi aggiunti per evitare duplicati
+
+            for edge in edges:
+                gene1, gene2, weight, chrom1, chrom2 = edge
+
+                # Evita duplicati di archi bidirezionali
+                if (gene1, gene2) not in added_edges and (gene2, gene1) not in added_edges:
+                    if chrom1 < chrom2:
+                        self._graph.add_edge(gene1, gene2, weight=weight)
+                    elif chrom1 > chrom2:
+                        self._graph.add_edge(gene2, gene1, weight=weight)
+                    else:
+                        # Stesso cromosoma: aggiungi entrambi gli archi
+                        self._graph.add_edge(gene1, gene2, weight=weight)
+                        self._graph.add_edge(gene2, gene1, weight=weight)
+
+                    added_edges.add((gene1, gene2))
+
+
+    def get_node_max_uscenti(self):
+        result = []
+
+        for node in self._graph.nodes():
+            # Conta gli archi uscenti
+            num_outgoing = self._graph.out_degree(node)
+
+            # Calcola il peso totale degli archi uscenti
+            total_weight = 0
+            outgoing_edges = self._graph.out_edges(node, data=True)
+            for edge in outgoing_edges:
+                weight = edge[2].get("weight", 0)  # Ottieni il peso dell'arco
+                total_weight += weight
+
+            # Aggiungi il nodo ai risultati
+            result.append((node, num_outgoing, total_weight))
+
+        # Ordina i nodi per numero di archi uscenti e peso totale
+        result.sort(key=lambda x: (-x[1], -x[2]))
+
+        # Restituisci i primi 5 nodi
+        return result[:5]
+
+    def getCaratteristiche(self):
+        return self._graph.number_of_nodes(), self._graph.number_of_edges()
+
+    def find_longest_path(self):
+        """Trova il cammino più lungo che minimizza il peso, partendo da un nodo iniziale."""
+        # Inizializza la variabile per il cammino migliore e il peso migliore
+        best_path = []
+        best_weight = float('inf')
+
+        # Scegli un nodo di partenza, per esempio il primo nodo nel grafo
+        start_node = list(self._graph.nodes())[0]  # Usa il primo nodo nel grafo
+
+        # Inizia la ricerca ricorsiva
+        self.recursion(start_node, [start_node], 0, -float('inf'), best_path, best_weight)
+
+        # Restituisci il cammino migliore e il peso migliore trovato
+        return best_path, best_weight
+
+    def recursion(self, node, path, current_weight, last_weight, best_path, best_weight):
+        """Funzione ricorsiva che esplora tutti i cammini possibili."""
+        # Se il cammino è migliore, aggiorna
+        if len(path) > len(best_path) or (len(path) == len(best_path) and current_weight < best_weight):
+            best_path[:] = path[:]
+            best_weight = current_weight
+
+        # Trova i successori validi (ammissibili)
+        self.explore_successors(node, path, current_weight, last_weight, best_path, best_weight)
+
+    def explore_successors(self, node, path, current_weight, last_weight, best_path, best_weight):
+        """Esplora i successori di un nodo valido."""
+        for successor in self._graph.successors(node):
+            edge_data = self._graph.get_edge_data(node, successor)
+            edge_weight = edge_data.get("weight", 0)
+
+            # Verifica le condizioni
+            if (
+                    successor not in path and
+                    self._graph.nodes[node].get("Essential") != self._graph.nodes[successor].get("Essential") and
+                    edge_weight >= last_weight
+            ):
+                # Chiamata ricorsiva con il successore
+                self.recursion(successor, path + [successor], current_weight + edge_weight, edge_weight, best_path,
+                               best_weight)
+
+    def calculate_path_weight(self, path):
+        """Calcola il peso totale di un cammino."""
+        total_weight = 0
+        for i in range(len(path) - 1):
+            edge_data = self._graph.get_edge_data(path[i], path[i + 1])
+            total_weight += edge_data.get("weight", 0)
+        return total_weight
