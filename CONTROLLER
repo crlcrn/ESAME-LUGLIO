@@ -1,0 +1,69 @@
+import flet as ft
+from UI.view import View
+from model.modello import Model
+
+
+class Controller:
+    def __init__(self, view: View, model: Model):
+        # the view, with the graphical elements of the UI
+        self._view = view
+        # the model, which implements the logic of the program and holds the data
+        self._model = model
+
+    def handle_graph(self, e):
+
+        if self._view.dd_min_ch.value is None:
+            self._view.create_alert('Selezionare un valore per il Chromosoma min')
+            return
+
+        else:
+            ch_min = int(self._view.dd_min_ch.value)
+
+        if self._view.dd_max_ch.value is None:
+            self._view.create_alert('Selezionare un valore per il Chromosoma max')
+            return
+
+        else:
+            ch_max = int(self._view.dd_max_ch.value)
+
+        if ch_min > ch_max:
+            self._view.create_alert('Attenzione: deve essere Chromosoma min <= Chromosoma max')
+            return
+
+        self._model.build_graph(ch_min, ch_max)
+        self._view.txt_result1.controls.clear()
+        nNodi, nArchi = self._model.getCaratteristiche()
+        self._view.txt_result1.controls.append(ft.Text(f"Creato grafo con {nNodi} nodi e {nArchi} archi"))
+
+        top_nodes = self._model.get_node_max_uscenti()
+        self._view.txt_result1.controls.append(ft.Text(f"\nI 5 nodi col maggior numero di archi uscenti sono:"))
+
+
+        for node, num_outgoing, total_weight in top_nodes:
+            # Aggiungi una riga con le informazioni sul nodo
+            self._view.txt_result1.controls.append(
+                ft.Text(f"{node} | num. archi uscenti: {num_outgoing} | peso tot.: {total_weight}"))
+
+        self._view.btn_dettagli.disabled = False
+        self._view.btn_path.disabled = False
+        self._view.update_page()
+
+
+    def handle_dettagli(self, e):
+        pass
+
+
+    def handle_path(self, e):
+        self._view.txt_result2.controls.clear()
+        cammino_ottimo, costo_ottimo = self._model.find_longest_path()
+        self._view.txt_result2.controls.append(ft.Text(f"Trovato un cammino ottimo di lunghezza {len(cammino_ottimo)}"))
+        self._view.txt_result2.controls.append(ft.Text(f"Il costo del cammino ottimo è {costo_ottimo}"))
+        self._view.txt_result2.controls.append(ft.Text(f"Le fermate del cammino sono:"))
+        for n in cammino_ottimo:
+            self._view.txt_result2.controls.append(ft.Text(f"{n}"))
+        self._view.update_page()
+
+    def fill_dd_ch(self):
+        values = self._model.get_chromosomes()
+        self._view.dd_min_ch.options = list(map(lambda x: ft.dropdown.Option(key=x, text=x), values))
+        self._view.dd_max_ch.options = list(map(lambda x: ft.dropdown.Option(key=x, text=x), values))
